@@ -34,7 +34,9 @@ enum HapTextureFormat {
     HAP_FMT_RGBDXT1   = 0x0B,
     HAP_FMT_RGBADXT5  = 0x0E,
     HAP_FMT_YCOCGDXT5 = 0x0F,
+    HAP_FMT_RGBABPTC  = 0x0C,
     HAP_FMT_RGTC1     = 0x01,
+    HAP_FMT_MULTIPLE  = 0x0D,
 };
 
 enum HapCompressor {
@@ -44,6 +46,7 @@ enum HapCompressor {
 };
 
 enum HapSectionType {
+    HAP_ST_MULTIPLEIMAGES  = 0x0D,
     HAP_ST_DECODE_INSTRUCTIONS = 0x01,
     HAP_ST_COMPRESSOR_TABLE    = 0x02,
     HAP_ST_SIZE_TABLE          = 0x03,

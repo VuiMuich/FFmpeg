@@ -24,7 +24,7 @@
  * @file
  * Hap encoder
  *
- * Fourcc: Hap1, Hap5, HapY
+ * Fourcc: Hap1, Hap5, HapY, HapM, Hap7
  *
  * https://github.com/Vidvox/hap/blob/master/documentation/HapVideoDRAFT.md
  */
@@ -191,7 +191,7 @@ static void hap_write_frame_header(HapContext *ctx, uint8_t *dst, int frame_leng
     }
 }
 
-static int hap_encode(AVCodecContext *avctx, AVPacket *pkt,
+static int hap_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                       const AVFrame *frame, int *got_packet)
 {
     HapContext *ctx = avctx->priv_data;
@@ -233,7 +233,7 @@ static int hap_encode(AVCodecContext *avctx, AVPacket *pkt,
     return 0;
 }
 
-static av_cold int hap_init(AVCodecContext *avctx)
+static av_cold int hap_encode_init(AVCodecContext *avctx)
 {
     HapContext *ctx = avctx->priv_data;
     int ratio;
@@ -254,6 +254,8 @@ static av_cold int hap_init(AVCodecContext *avctx)
 
     ff_texturedspenc_init(&ctx->dxtc);
 
+    ctx->texture_count  = 1;
+
     switch (ctx->opt_tex_fmt) {
     case HAP_FMT_RGBDXT1:
         ratio = 8;
@@ -272,6 +274,26 @@ static av_cold int hap_init(AVCodecContext *avctx)
         avctx->codec_tag = MKTAG('H', 'a', 'p', 'Y');
         avctx->bits_per_coded_sample = 24;
         ctx->tex_fun = ctx->dxtc.dxt5ys_block;
+        break;
+    case HAP_FMT_RGTC1:
+        ratio = 4;
+        avctx->codec_tag =  MKTAG('H','a','p','A');
+        avctx->bits_per_coded_sample = 8;
+        ctx->tex_fun = ctx->dxtc.rgtc1u_alpha_block;
+        break;
+    case HAP_FMT_MULTIPLE:
+        ratio = 4;
+        avctx->codec_tag = MKTAG('H','a','p','M');
+        avctx->bits_per_coded_sample = 32;
+        ctx->texture_count = 2;
+        ctx->tex_fun = ctx->dxtc.dxt5ys_block;
+        ctx->tex_fun2 = ctx->dxtc.rgtc1u_alpha_block;
+        break;
+    case HAP_FMT_RGBABPTC:
+        ratio = 4;
+        avctx->codec_tag =  MKTAG('H','a','p','7');
+        avctx->bits_per_coded_sample = 32;
+        ctx->tex_fun = ctx->dxtc.dxt5_block;
         break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Invalid format %02X\n", ctx->opt_tex_fmt);
@@ -319,7 +341,7 @@ static av_cold int hap_init(AVCodecContext *avctx)
     return 0;
 }
 
-static av_cold int hap_close(AVCodecContext *avctx)
+static av_cold int hap_encode_close(AVCodecContext *avctx)
 {
     HapContext *ctx = avctx->priv_data;
 
@@ -329,12 +351,15 @@ static av_cold int hap_close(AVCodecContext *avctx)
 }
 
 #define OFFSET(x) offsetof(HapContext, x)
-#define FLAGS     AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
+#define FLAGS     (AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM)
 static const AVOption options[] = {
     { "format", NULL, OFFSET(opt_tex_fmt), AV_OPT_TYPE_INT, { .i64 = HAP_FMT_RGBDXT1 }, HAP_FMT_RGBDXT1, HAP_FMT_YCOCGDXT5, FLAGS, "format" },
-        { "hap",       "Hap 1 (DXT1 textures)", 0, AV_OPT_TYPE_CONST, { .i64 = HAP_FMT_RGBDXT1   }, 0, 0, FLAGS, "format" },
-        { "hap_alpha", "Hap Alpha (DXT5 textures)", 0, AV_OPT_TYPE_CONST, { .i64 = HAP_FMT_RGBADXT5  }, 0, 0, FLAGS, "format" },
-        { "hap_q",     "Hap Q (DXT5-YCoCg textures)", 0, AV_OPT_TYPE_CONST, { .i64 = HAP_FMT_YCOCGDXT5 }, 0, 0, FLAGS, "format" },
+        { "hap",            "Hap 1 (DXT1 textures)", 0, AV_OPT_TYPE_CONST, { .i64 = HAP_FMT_RGBDXT1   }, 0, 0, FLAGS, "format" },
+        { "hap_alpha",      "Hap Alpha (DXT5 textures)", 0, AV_OPT_TYPE_CONST, { .i64 = HAP_FMT_RGBADXT5  }, 0, 0, FLAGS, "format" },
+        { "hap_q",          "Hap Q (DXT5-YCoCg textures)", 0, AV_OPT_TYPE_CONST, { .i64 = HAP_FMT_YCOCGDXT5 }, 0, 0, FLAGS, "format" },
+        { "hap_alpha_only", "Hap Alpha only (BC4-Alpha textures)", 0, AV_OPT_TYPE_CONST, { .i64 = HAP_FMT_RGTC1 }, 0, 0, FLAGS, "format" },
+        { "halp_q_alpha",   "Hap Q Alpha (DXT5-YCoCg + BC4-Alpha textures)", 0, AV_OPT_TYPE_CONST, { .i64 = HAP_FMT_MULTIPLE }, 0, 0, FLAGS, "format"},
+//for later use, implement BC7 texture compression fist        { "hap_bc7",        "Hap BC7 (BC7 RGBA Textures)", 0, AV_OPT_TYPE_CONST, { .i64 = HAP_FMT_RGBABPTC }, 0, 0, FLAGS, "format" },
     { "chunks", "chunk count", OFFSET(opt_chunk_count), AV_OPT_TYPE_INT, {.i64 = 1 }, 1, HAP_MAX_CHUNKS, FLAGS, },
     { "compressor", "second-stage compressor", OFFSET(opt_compressor), AV_OPT_TYPE_INT, { .i64 = HAP_COMP_SNAPPY }, HAP_COMP_NONE, HAP_COMP_SNAPPY, FLAGS, "compressor" },
         { "none",       "None", 0, AV_OPT_TYPE_CONST, { .i64 = HAP_COMP_NONE }, 0, 0, FLAGS, "compressor" },
@@ -356,9 +381,9 @@ const AVCodec ff_hap_encoder = {
     .id             = AV_CODEC_ID_HAP,
     .priv_data_size = sizeof(HapContext),
     .priv_class     = &hapenc_class,
-    .init           = hap_init,
-    .encode2        = hap_encode,
-    .close          = hap_close,
+    .init           = hap_encode_init,
+    .encode2        = hap_encode_frame,
+    .close          = hap_encode_close,
     .pix_fmts       = (const enum AVPixelFormat[]) {
         AV_PIX_FMT_RGBA, AV_PIX_FMT_NONE,
     },

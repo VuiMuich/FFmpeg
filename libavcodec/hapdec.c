@@ -26,7 +26,7 @@
  * @file
  * Hap decoder
  *
- * Fourcc: Hap1, Hap5, HapY, HapA, HapM
+ * Fourcc: Hap1, Hap5, HapY, HapA, HapM, Hap7
  *
  * https://github.com/Vidvox/hap/blob/master/documentation/HapVideoDRAFT.md
  */
@@ -301,7 +301,7 @@ static int decompress_texture2_thread(AVCodecContext *avctx, void *arg,
     return decompress_texture_thread_internal(avctx, arg, slice, thread_nb, 1);
 }
 
-static int hap_decode(AVCodecContext *avctx, void *data,
+static int hap_decode_frame(AVCodecContext *avctx, void *data,
                       int *got_frame, AVPacket *avpkt)
 {
     HapContext *ctx = avctx->priv_data;
@@ -401,7 +401,7 @@ static int hap_decode(AVCodecContext *avctx, void *data,
     return avpkt->size;
 }
 
-static av_cold int hap_init(AVCodecContext *avctx)
+static av_cold int hap_decode_init(AVCodecContext *avctx)
 {
     HapContext *ctx = avctx->priv_data;
     const char *texture_name;
@@ -457,6 +457,12 @@ static av_cold int hap_init(AVCodecContext *avctx)
         avctx->pix_fmt = AV_PIX_FMT_RGBA;
         ctx->texture_count = 2;
         break;
+     case MKTAG('H','a','p','7'):
+        texture_name = "BPTC Unorm BC7";
+        ctx->tex_rat = 16;
+        ctx->tex_fun = ctx->dxtc.dxt5_block;
+        avctx->pix_fmt = AV_PIX_FMT_RGBA;
+        break;
     default:
         return AVERROR_DECODER_NOT_FOUND;
     }
@@ -469,7 +475,7 @@ static av_cold int hap_init(AVCodecContext *avctx)
     return 0;
 }
 
-static av_cold int hap_close(AVCodecContext *avctx)
+static av_cold int hap_decode_close(AVCodecContext *avctx)
 {
     HapContext *ctx = avctx->priv_data;
 
@@ -483,9 +489,9 @@ const AVCodec ff_hap_decoder = {
     .long_name      = NULL_IF_CONFIG_SMALL("Vidvox Hap"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_HAP,
-    .init           = hap_init,
-    .decode         = hap_decode,
-    .close          = hap_close,
+    .init           = hap_decode_init,
+    .decode         = hap_decode_frame,
+    .close          = hap_decode_close,
     .priv_data_size = sizeof(HapContext),
     .capabilities   = AV_CODEC_CAP_FRAME_THREADS | AV_CODEC_CAP_SLICE_THREADS |
                       AV_CODEC_CAP_DR1,
@@ -497,6 +503,7 @@ const AVCodec ff_hap_decoder = {
         MKTAG('H','a','p','Y'),
         MKTAG('H','a','p','A'),
         MKTAG('H','a','p','M'),
+        MKTAG('H','a','p','7'),
         FF_CODEC_TAGS_END,
     },
 };
